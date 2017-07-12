@@ -57,6 +57,34 @@ public protocol SBASurveyRule : NSSecureCoding {
 }
 
 /**
+ The `SBADataGroupNavigationRule` is used to extend the SBASurveyRule or
+ allow for skipping a step based on the current data groups.
+ */
+public protocol SBADataGroupNavigationRule: NSSecureCoding {
+    
+    /**
+     Data groups to test against
+     */
+    var dataGroups: [String]? { get }
+    
+    /**
+     For navigation with data groups, need to retain the rule operator
+     */
+    var ruleOperator: SBASurveyRuleOperator? { get }
+}
+
+public protocol SBADataGroupsBeforeNavigationRule: SBADataGroupNavigationRule {
+    
+    /**
+     If the dataGroup rule passes then display the step.
+     */
+    var displayIfPassed: Bool { get }
+}
+
+public protocol SBADataGroupsAfterNavigationRule: SBASurveyRule, SBADataGroupNavigationRule {
+}
+
+/**
  List of rules creating the survey rule items.
  */
 public enum SBASurveyRuleOperator: String {
@@ -68,6 +96,9 @@ public enum SBASurveyRuleOperator: String {
     case lessThanEqual      = "le"
     case greaterThanEqual   = "ge"
     case otherThan          = "ot"
+    case always             = "always"
+    case allDataGroups      = "all"
+    case anyDataGroups      = "any"
 }
 
 /**
@@ -143,13 +174,15 @@ extension SBASurveyRuleItem {
             return NSPredicate(format: "answer < %@", value!)
         case .lessThanEqual:
             return NSPredicate(format: "answer <= %@", value!)
+        case .always, .allDataGroups, .anyDataGroups:
+            return NSPredicate(value: true)
         }
     }
     
     func isValidRule() -> Bool {
         let value = self.expectedAnswer as? NSObject
         let op: SBASurveyRuleOperator = self.ruleOperator ?? ((value == nil) ? .skip : .equal)
-        return (value != nil) || (op == .skip)
+        return (value != nil) || ((op == .skip) || (op == .always))
     }
     
     func convertValueAndOperator(with subtype: SBASurveyItemType.FormSubtype, shouldAssert:Bool = true) -> (valid:Bool, value:CVarArg?, op:SBASurveyRuleOperator) {
@@ -281,6 +314,8 @@ extension SBASurveyRuleGroup {
                 let ruleObject = SBASurveyRuleObject(identifier: identifier)
                 ruleObject.skipIdentifier = skipIdentifier
                 ruleObject.rulePredicate = rulePredicate
+                ruleObject.ruleOperatorRawValue = rule.ruleOperator?.rawValue                
+                ruleObject.dataGroups = (rule as? SBADataGroupNavigationRule)?.dataGroups
                 
                 return ruleObject
             }()
@@ -307,7 +342,7 @@ extension SBASurveyRuleGroup {
 /**
  The `SBASurveyRuleObject` provides a concrete implementation of the `SBASurveyRule`
  */
-public class SBASurveyRuleObject: SBADataObject, SBASurveyRule {
+public class SBASurveyRuleObject: SBADataObject, SBADataGroupsAfterNavigationRule {
     
     public var resultIdentifier: String {
         return self.identifier
@@ -315,9 +350,21 @@ public class SBASurveyRuleObject: SBADataObject, SBASurveyRule {
     
     public dynamic var skipIdentifier: String!
     public dynamic var rulePredicate: NSPredicate!
+    public dynamic var dataGroups: [String]?
+    
+    dynamic var ruleOperatorRawValue: String?
+    
+    public var ruleOperator: SBASurveyRuleOperator? {
+        guard let rawValue = ruleOperatorRawValue else { return nil }
+        return SBASurveyRuleOperator(rawValue: rawValue)
+    }
     
     override open func dictionaryRepresentationKeys() -> [String] {
-        return super.dictionaryRepresentationKeys().appending(contentsOf: [#keyPath(skipIdentifier), #keyPath(rulePredicate)])
+        return super.dictionaryRepresentationKeys().appending(contentsOf:
+            [#keyPath(skipIdentifier),
+             #keyPath(rulePredicate),
+             #keyPath(dataGroups),
+             #keyPath(ruleOperatorRawValue)])
     }
 }
 

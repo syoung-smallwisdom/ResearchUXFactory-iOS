@@ -57,6 +57,11 @@ public protocol SBASurveyNavigationStep: SBAPredicateNavigationStep, SBANavigati
      Form step that matches with the given result
     */
     func matchingSurveyStep(for stepResult: ORKStepResult) -> SBAFormStepProtocol?
+    
+    /**
+     Returns the current data groups associated with this step
+     */
+    var currentDataGroups: [String]? { get }
 }
 
 public extension SBASurveyNavigationStep {
@@ -114,7 +119,21 @@ public extension SBASurveyNavigationStep {
         for rule in rules {
             if rule.resultIdentifier == formItem.identifier,
                 let predicate = rule.rulePredicate, predicate.evaluate(with: result) {
-                return rule
+                
+                // Check for data groups
+                if let dataGroupsRule = rule as? SBADataGroupNavigationRule,
+                    let dataGroups = dataGroupsRule.dataGroups,
+                    let ruleOperator = dataGroupsRule.ruleOperator {
+                    
+                    let count = Set(self.currentDataGroups ?? []).intersection(dataGroups).count
+                    if ((ruleOperator == .allDataGroups) && (count == dataGroups.count)) ||
+                        ((ruleOperator == .anyDataGroups) && (count > 0)) {
+                        return rule
+                    }
+                }
+                else {
+                    return rule
+                }
             }
         }
         return nil

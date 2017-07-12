@@ -53,6 +53,10 @@ open class SBANavigationQuestionStep: ORKQuestionStep, SBASurveyNavigationStep {
     public var rules: [SBASurveyRule]?
     public var failedSkipIdentifier: String?
     
+    lazy open var currentDataGroups: [String]? = {
+        return SBAInfoManager.shared.currentParticipant.dataGroups
+    }()
+    
     override public init(identifier: String) {
         super.init(identifier: identifier)
     }
